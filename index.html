@@ -112,7 +112,7 @@
         .class-name { width: 35%; word-break: break-all; }
         .class-prob { width: 15%; text-align: right; }
         
-        /* OCR 專用樣式 */
+        /* OCR 顯示區塊樣式 */
         #ocr-text-box {
             font-family: monospace;
             background-color: #f7fafc;
@@ -122,6 +122,7 @@
             min-height: 24px;
             word-break: break-all;
             font-size: 14px;
+            color: #2d3748;
         }
         .keyword-match {
             margin-top: 8px;
@@ -133,12 +134,12 @@
 <body>
 
     <h2>智動化 AI AOI 檢測體驗</h2>
-    <div class="subtitle">目標物件：外觀特徵分類 + 筆身文字 OCR 識別</div>
+    <div class="subtitle">雙重驗證：外觀特徵分類 + 筆身文字 OCR 識別</div>
 
     <div id="webcam-container"></div>
     
     <button id="start-btn" onclick="init()">開啟相機與雙重模型檢測</button>
-    <div id="loading-text" id="status-message">AI 影像模型與 OCR 引擎載入中，請稍候...</div>
+    <div id="loading-text">AI 影像模型與 OCR 引擎載入中，請稍候...</div>
 
     <div class="panel">
         <div class="panel-title">【檢測一】影像外觀特徵分類 (Teachable Machine)</div>
@@ -150,20 +151,20 @@
     <div class="panel">
         <div class="panel-title">【檢測二】筆身文字 OCR 識別 (Tesseract.js)</div>
         <div id="ocr-container">
-            <div style="font-size: 13px; color: #718096; margin-bottom: 5px;">即時擷取文字：</div>
+            <div style="font-size: 13px; color: #718096; margin-bottom: 5px;">即時擷取英文字：</div>
             <div id="ocr-text-box">---</div>
             <div id="ocr-match-result" class="keyword-match" style="color: #a0aec0;">關鍵字比對：對齊物件中...</div>
         </div>
     </div>
 
     <script type="text/javascript">
-        // 🛠️ 老師請注意：請務必將下方連結替換為您在 Teachable Machine 產生的模型網址
-        const URL = "https://teachablemachine.withgoogle.com/models/bXyZ1234/";
+        // 🛠️ 老師請注意：請務必將下方連結替換為您在 Teachable Machine 產生的模型網址（保留最後的斜線 /）
+        const URL = "https://teachablemachine.withgoogle.com/models/您的模型代碼/";
 
         let model, webcam, labelContainer, maxPredictions;
         let ocrWorker = null;
         let isSetup = false;
-        let isOcrProcessing = false; // 用來控制 OCR 辨識頻率，避免手機效能卡死
+        let isOcrProcessing = false; 
 
         async function init() {
             if (isSetup) return; 
@@ -179,23 +180,27 @@
                 model = await tmImage.load(modelURL, metadataURL);
                 maxPredictions = model.getTotalClasses();
 
-                // 2. 初始化 OCR 引擎 (同時載入英文與繁體中文語系)
-                ocrWorker = await Tesseract.createWorker('eng+chi_tra');
+                // 2. 初始化 OCR 引擎（優化：改為純英文 eng 提高加載成功率與運行速度）
+                ocrWorker = await Tesseract.createWorker('eng');
 
-                // 3. 設定標準相機解析度
+                // 3. 設定相機解析度
                 const width = 400;
                 const height = 300;
                 const flip = false; 
                 
                 webcam = new tmImage.Webcam(width, height, flip);
                 
+                // 4. 智慧相機相容性調適機制
                 try {
+                    // 優先嘗試開啟手機後置鏡頭
                     await webcam.setup({ facingMode: "environment" }); 
                 } catch (e) {
-                    console.log("切換為預設/電腦視訊鏡頭");
+                    console.log("無法調用後鏡頭，自動切換為預設/電腦視訊鏡頭");
+                    // 失敗時（如電腦瀏覽器備課測試），盲抓預設可用的視訊鏡頭
                     await webcam.setup(); 
                 }
                 
+                // 5. 啟動鏡頭串流
                 await webcam.play();
                 document.getElementById('loading-text').style.display = 'none';
                 
@@ -205,7 +210,7 @@
                 
                 document.getElementById("webcam-container").appendChild(videoElement);
 
-                // 4. 初始化外觀分類顯示欄位
+                // 6. 初始化外觀分類顯示欄位
                 labelContainer = document.getElementById("label-container");
                 labelContainer.innerHTML = ""; 
                 for (let i = 0; i < maxPredictions; i++) {
@@ -222,10 +227,11 @@
                 }
 
                 isSetup = true;
+                // 進入影像推論無限循環迴圈
                 window.requestAnimationFrame(loop);
                 
             } catch (error) {
-                alert("系統啟動失敗！請檢查模型網址、相機權限，或嘗試重新整理網頁。");
+                alert("系統啟動失敗！\n\n排除步驟：\n1. 請確認第 114 行的 URL 是否已修改為您個人的 Teachable Machine 有效網址。\n2. 請確認已允許瀏覽器的相機存取權限。\n3. 若使用 iPhone，請務必複製網址並使用內建的 Safari 瀏覽器開啟！");
                 console.error(error);
                 document.getElementById('start-btn').style.display = 'block';
                 document.getElementById('loading-text').style.display = 'none';
@@ -233,18 +239,19 @@
         }
 
         async function loop() {
-            webcam.update(); // 擷取最新影格
-            await predictImage(); // 執行外觀分類
-            
-            // OCR 運算量較大，若上一張還沒解析完則跳過，避免畫面凍結（採非同步分流處理）
-            if (!isOcrProcessing && isSetup) {
-                runOCR(); 
+            if (isSetup) {
+                webcam.update(); // 擷取當前最新影格
+                await predictImage(); // 執行影像特徵分類
+                
+                // OCR 運算量大，採非同步分流處理。若上一次辨識尚未結束則直接跳過，防止網頁凍結
+                if (!isOcrProcessing) {
+                    runOCR(); 
+                }
             }
-            
             window.requestAnimationFrame(loop);
         }
 
-        // 核心一：外觀特徵辨識
+        // 核心一：影像外觀特徵分類辨識
         async function predictImage() {
             const prediction = await model.predict(webcam.canvas);
             
@@ -258,6 +265,7 @@
                     row.querySelector('#prob-' + i).innerText = probability + "%";
                     row.querySelector('#bar-' + i).style.width = probability + "%";
                     
+                    // 信心度大於 70% 顯示藍色能量條，否則顯示灰色
                     if (probability > 70) {
                         row.querySelector('#bar-' + i).style.backgroundColor = "#3182ce";
                     } else {
@@ -267,36 +275,31 @@
             }
         }
 
-        // 核心二：OCR 文字辨識與字串特徵比對
+        // 核心二：OCR 文字辨識與字串邏輯特徵比對
         async function runOCR() {
             isOcrProcessing = true;
             
             try {
-                // 將當前相機畫布轉為圖片丟給 Tesseract 辨識
+                // 將當前相機畫布影像丟給 Tesseract 進行文字辨識
                 const { data: { text } } = await ocrWorker.recognize(webcam.canvas);
                 
-                // 清洗辨識出的文字（轉小寫、去除多餘空白與換行）
+                // 將文字清理（轉小寫、去除換行與空格）以便精準比對
                 const cleanText = text.toLowerCase().replace(/\s+/g, '');
                 
                 if (cleanText.trim() !== "") {
-                    document.getElementById('ocr-text-box').innerText = text;
+                    document.getElementById('ocr-text-box').innerText = text.trim();
                     
-                    // 關鍵字邏輯判斷
-                    let matchMessage = "";
-                    let isWhiteboard = cleanText.includes("white") || cleanText.includes("白板");
-                    let isPermanent = cleanText.includes("mark") || cleanText.includes("奇異") || cleanText.includes("marker");
+                    // 工業筆身常見印刷關鍵字匹配邏輯
+                    let isWhiteboard = cleanText.includes("white") || cleanText.includes("board");
+                    let isPermanent = cleanText.includes("mark") || cleanText.includes("perm") || cleanText.includes("pema");
                     
                     const resultEl = document.getElementById('ocr-match-result');
                     
-                    if (isWhiteboard && isPermanent) {
-                        // 防止複合字干擾（如白板筆英文通常叫 Whiteboard Marker）
-                        resultEl.innerText = "🔍 偵測到雙重特徵，判定為：白板筆 (Whiteboard Marker)";
-                        resultEl.style.color = "#3182ce";
-                    } else if (isWhiteboard) {
-                        resultEl.innerText = "📌 辨識出關鍵字！判定為：白板筆";
+                    if (isWhiteboard) {
+                        resultEl.innerText = "📌 辨識出文字特徵！判定為：白板筆 (Whiteboard)";
                         resultEl.style.color = "#3182ce";
                     } else if (isPermanent) {
-                        resultEl.innerText = "📌 辨識出關鍵字！判定為：奇異筆";
+                        resultEl.innerText = "📌 辨識出文字特徵！判定為：奇異筆 (Permanent)";
                         resultEl.style.color = "#e53e3e";
                     } else {
                         resultEl.innerText = "❌ 未發現匹配關鍵字";
@@ -304,13 +307,13 @@
                     }
                 }
             } catch (err) {
-                console.error("OCR 辨識錯誤:", err);
+                console.error("OCR 運算錯誤:", err);
             }
             
-            // 延遲 500 毫秒再進行下一次辨識，降低硬體負荷
+            // 每次 OCR 執行完畢後強制冷卻 600 毫秒，避免低階手機或網頁因高頻率計算而卡頓
             setTimeout(() => {
                 isOcrProcessing = false;
-            }, 500);
+            }, 600);
         }
     </script>
 </body>
