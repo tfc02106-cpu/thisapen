@@ -7,7 +7,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    
+
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, "Noto Sans TC", sans-serif;
@@ -46,30 +46,6 @@
             height: 100% !important;
             object-fit: cover;
         }
-        #start-btn {
-            background-color: #3182ce;
-            color: white;
-            border: none;
-            padding: 12px 28px;
-            font-size: 16px;
-            font-weight: bold;
-            border-radius: 8px;
-            cursor: pointer;
-            margin: 20px 0;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            transition: background 0.2s;
-        }
-        #start-btn:active { background-color: #2b6cb0; }
-        #loading-text {
-            color: #e53e3e;
-            font-weight: bold;
-            margin: 20px 0;
-            display: none;
-            font-size: 16px;
-            text-align: center;
-            line-height: 1.7;
-            white-space: pre-line;
-        }
         .panel {
             width: 100%;
             max-width: 400px;
@@ -87,6 +63,62 @@
             border-bottom: 2px solid #edf2f7;
             padding-bottom: 5px;
             margin-bottom: 10px;
+        }
+        .model-input {
+            width: 100%;
+            border: 1px solid #cbd5e0;
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 14px;
+            color: #2d3748;
+            box-sizing: border-box;
+        }
+        .model-input:focus {
+            outline: none;
+            border-color: #3182ce;
+            box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.15);
+        }
+        .model-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .mini-btn {
+            flex: 1;
+            border: none;
+            border-radius: 8px;
+            padding: 9px 10px;
+            font-size: 13px;
+            font-weight: bold;
+            cursor: pointer;
+            background: #edf2f7;
+            color: #2d3748;
+        }
+        .mini-btn:hover { background: #e2e8f0; }
+        #start-btn {
+            background-color: #3182ce;
+            color: white;
+            border: none;
+            padding: 12px 28px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: background 0.2s;
+        }
+        #start-btn:active { background-color: #2b6cb0; }
+        #start-btn:disabled { background: #a0aec0; cursor: not-allowed; }
+        #loading-text {
+            color: #e53e3e;
+            font-weight: bold;
+            margin: 20px 0;
+            display: none;
+            font-size: 16px;
+            text-align: center;
+            line-height: 1.7;
+            white-space: pre-line;
         }
         .label-row {
             display: flex;
@@ -134,17 +166,36 @@
             color: #718096;
             margin-top: 8px;
             line-height: 1.6;
+            word-break: break-all;
+        }
+        .hint {
+            margin-top: 8px;
+            font-size: 12px;
+            line-height: 1.6;
+            color: #718096;
         }
     </style>
 </head>
 <body>
 
     <h2>智動化 AI AOI 檢測體驗</h2>
-    <div class="subtitle">影像外觀特徵分類 + 筆身文字 OCR 識別<br>目前模型：4Wj6Jfy4T</div>
+    <div class="subtitle">影像外觀特徵分類 + 筆身文字 OCR 識別<br>內定模型：4Wj6Jfy4T，同學也可以貼自己的模型網址</div>
+
+    <div class="panel">
+        <div class="panel-title">【課堂設定】Teachable Machine 模型網址</div>
+        <input id="model-url-input" class="model-input" type="url" inputmode="url"
+               value="https://teachablemachine.withgoogle.com/models/4Wj6Jfy4T/"
+               placeholder="請貼上 Teachable Machine 模型網址，例如：https://teachablemachine.withgoogle.com/models/xxxx/">
+        <div class="model-actions">
+            <button class="mini-btn" type="button" onclick="useDefaultModel()">恢復老師內定模型</button>
+            <button class="mini-btn" type="button" onclick="clearModelInput()">清空讓同學貼上</button>
+        </div>
+        <div class="hint">提醒：請貼「影像專案」模型網址，網址最後有沒有斜線都可以。啟動後若要換模型，請重新整理頁面再貼新的網址。</div>
+    </div>
 
     <div id="webcam-container"></div>
-    
-    <button id="start-btn" onclick="init()">開啟相機與模型檢測</button>
+
+    <button id="start-btn" onclick="init()">使用上方模型開啟相機檢測</button>
     <div id="loading-text">AI 影像模型載入中，請稍候...</div>
 
     <div class="panel">
@@ -152,7 +203,7 @@
         <div id="label-container">
             <div class="label-row" style="justify-content: center; color: #a0aec0; font-size: 16px;">等待系統啟動...</div>
         </div>
-        <div class="small-note" id="model-note">模型網址：https://teachablemachine.withgoogle.com/models/4Wj6Jfy4T/</div>
+        <div class="small-note" id="model-note">目前模型網址：https://teachablemachine.withgoogle.com/models/4Wj6Jfy4T/</div>
     </div>
 
     <div class="panel">
@@ -165,14 +216,51 @@
     </div>
 
     <script type="text/javascript">
-        // Teachable Machine 影像模型網址：保留最後的斜線 /
-        const URL = "https://teachablemachine.withgoogle.com/models/4Wj6Jfy4T/";
+        const DEFAULT_MODEL_URL = "https://teachablemachine.withgoogle.com/models/4Wj6Jfy4T/";
 
         let model, webcam, labelContainer, maxPredictions;
         let ocrWorker = null;
         let isSetup = false;
         let isOcrProcessing = false;
         let lastOcrTime = 0;
+        let activeModelURL = DEFAULT_MODEL_URL;
+
+        function normalizeModelURL(rawURL) {
+            const text = (rawURL || "").trim();
+            if (!text) return DEFAULT_MODEL_URL;
+            return text.endsWith("/") ? text : text + "/";
+        }
+
+        function getSelectedModelURL() {
+            const input = document.getElementById('model-url-input');
+            return normalizeModelURL(input.value);
+        }
+
+        function updateModelNote(url) {
+            document.getElementById('model-note').innerText = "目前模型網址：" + url;
+        }
+
+        function useDefaultModel() {
+            if (isSetup) {
+                alert("模型已啟動。若要更換模型，請重新整理頁面後再設定。");
+                return;
+            }
+            document.getElementById('model-url-input').value = DEFAULT_MODEL_URL;
+            updateModelNote(DEFAULT_MODEL_URL);
+        }
+
+        function clearModelInput() {
+            if (isSetup) {
+                alert("模型已啟動。若要更換模型，請重新整理頁面後再設定。");
+                return;
+            }
+            document.getElementById('model-url-input').value = "";
+            updateModelNote("尚未設定，若留空會使用老師內定模型");
+        }
+
+        document.getElementById('model-url-input').addEventListener('input', function() {
+            if (!isSetup) updateModelNote(normalizeModelURL(this.value));
+        });
 
         function showStatus(message, color = "#e53e3e") {
             const loading = document.getElementById('loading-text');
@@ -189,11 +277,17 @@
             if (isSetup) return;
 
             const startBtn = document.getElementById('start-btn');
-            startBtn.style.display = 'none';
-            showStatus('AI 影像模型載入中，請稍候...');
+            const modelInput = document.getElementById('model-url-input');
+            activeModelURL = getSelectedModelURL();
+            updateModelNote(activeModelURL);
 
-            const modelURL = URL + "model.json";
-            const metadataURL = URL + "metadata.json";
+            startBtn.disabled = true;
+            startBtn.innerText = "模型啟動中...";
+            modelInput.disabled = true;
+            showStatus('AI 影像模型載入中，請稍候...\n使用模型：' + activeModelURL);
+
+            const modelURL = activeModelURL + "model.json";
+            const metadataURL = activeModelURL + "metadata.json";
 
             try {
                 // 1. 先載入 Teachable Machine 影像模型。
@@ -207,6 +301,7 @@
 
                 isSetup = true;
                 hideStatus();
+                startBtn.style.display = 'none';
                 window.requestAnimationFrame(loop);
 
                 // 3. OCR 改成背景初始化；OCR 失敗不會讓整個系統啟動失敗。
@@ -217,6 +312,7 @@
                 const detail = error && error.message ? error.message : String(error);
                 alert(
                     '系統啟動失敗！\n\n' +
+                    '使用模型：' + activeModelURL + '\n\n' +
                     '錯誤細節：' + detail + '\n\n' +
                     '可能原因：\n' +
                     '1. 這個 Teachable Machine 連結不是「影像模型」。\n' +
@@ -224,7 +320,9 @@
                     '3. 相機權限尚未允許，或瀏覽器不支援相機。'
                 );
                 showStatus('啟動失敗：' + detail, '#e53e3e');
-                startBtn.style.display = 'inline-block';
+                startBtn.disabled = false;
+                startBtn.innerText = "使用上方模型開啟相機檢測";
+                modelInput.disabled = false;
             }
         }
 
