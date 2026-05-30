@@ -158,9 +158,8 @@
     </div>
 
     <script type="text/javascript">
-        // 🛠️ 老師請注意：請務必將下方連結替換為您在 Teachable Machine 產生的模型網址（保留最後的斜線 /）
-        //const URL = "https://teachablemachine.withgoogle.com/models/bXyZ1234/";
-        const URL = "https://teachablemachine.withgoogle.com/models/pcdE0szth/";
+        // Teachable Machine 模型網址：保留最後的斜線 /
+        const URL = "https://teachablemachine.withgoogle.com/models/4Wj6Jfy4T/";
         let model, webcam, labelContainer, maxPredictions;
         let ocrWorker = null;
         let isSetup = false;
@@ -231,7 +230,7 @@
                 window.requestAnimationFrame(loop);
                 
             } catch (error) {
-                alert("系統啟動失敗！\n\n排除步驟：\n1. 請確認第 114 行的 URL 是否已修改為您個人的 Teachable Machine 有效網址。\n2. 請確認已允許瀏覽器的相機存取權限。\n3. 若使用 iPhone，請務必複製網址並使用內建的 Safari 瀏覽器開啟！");
+                alert("系統啟動失敗！\n\n排除步驟：\n1. 請確認 Teachable Machine 模型網址是否有效。\n2. 請確認已允許瀏覽器的相機存取權限。\n3. 若使用 iPhone，請務必複製網址並使用內建的 Safari 瀏覽器開啟！");
                 console.error(error);
                 document.getElementById('start-btn').style.display = 'block';
                 document.getElementById('loading-text').style.display = 'none';
