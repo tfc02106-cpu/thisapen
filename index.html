@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AI AOI 筆類外觀與 OCR 辨識系統2</title>
+    <title>AI AOI 筆類外觀與 OCR 辨識系統</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, "Noto Sans TC", sans-serif;
             background-color: #f5f7fa;
             margin: 0;
             padding: 20px;
@@ -29,6 +29,7 @@
             color: #718096;
             margin-bottom: 20px;
             text-align: center;
+            line-height: 1.6;
         }
         #webcam-container {
             width: 100%;
@@ -58,9 +59,7 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             transition: background 0.2s;
         }
-        #start-btn:active {
-            background-color: #2b6cb0;
-        }
+        #start-btn:active { background-color: #2b6cb0; }
         #loading-text {
             color: #e53e3e;
             font-weight: bold;
@@ -68,6 +67,8 @@
             display: none;
             font-size: 16px;
             text-align: center;
+            line-height: 1.7;
+            white-space: pre-line;
         }
         .panel {
             width: 100%;
@@ -111,8 +112,6 @@
         }
         .class-name { width: 35%; word-break: break-all; }
         .class-prob { width: 15%; text-align: right; }
-        
-        /* OCR 顯示區塊樣式 */
         #ocr-text-box {
             font-family: monospace;
             background-color: #f7fafc;
@@ -128,24 +127,32 @@
             margin-top: 8px;
             font-weight: bold;
             font-size: 15px;
+            line-height: 1.6;
+        }
+        .small-note {
+            font-size: 12px;
+            color: #718096;
+            margin-top: 8px;
+            line-height: 1.6;
         }
     </style>
 </head>
 <body>
 
     <h2>智動化 AI AOI 檢測體驗</h2>
-    <div class="subtitle">雙重驗證：外觀特徵分類 + 筆身文字 OCR 識別</div>
+    <div class="subtitle">影像外觀特徵分類 + 筆身文字 OCR 識別<br>目前模型：4Wj6Jfy4T</div>
 
     <div id="webcam-container"></div>
     
-    <button id="start-btn" onclick="init()">開啟相機與雙重模型檢測</button>
-    <div id="loading-text">AI 影像模型與 OCR 引擎載入中，請稍候...</div>
+    <button id="start-btn" onclick="init()">開啟相機與模型檢測</button>
+    <div id="loading-text">AI 影像模型載入中，請稍候...</div>
 
     <div class="panel">
         <div class="panel-title">【檢測一】影像外觀特徵分類 (Teachable Machine)</div>
         <div id="label-container">
             <div class="label-row" style="justify-content: center; color: #a0aec0; font-size: 16px;">等待系統啟動...</div>
         </div>
+        <div class="small-note" id="model-note">模型網址：https://teachablemachine.withgoogle.com/models/4Wj6Jfy4T/</div>
     </div>
 
     <div class="panel">
@@ -153,147 +160,180 @@
         <div id="ocr-container">
             <div style="font-size: 13px; color: #718096; margin-bottom: 5px;">即時擷取英文字：</div>
             <div id="ocr-text-box">---</div>
-            <div id="ocr-match-result" class="keyword-match" style="color: #a0aec0;">關鍵字比對：對齊物件中...</div>
+            <div id="ocr-match-result" class="keyword-match" style="color: #a0aec0;">OCR 待初始化；影像模型會先啟動。</div>
         </div>
     </div>
 
     <script type="text/javascript">
-        // Teachable Machine 模型網址：保留最後的斜線 /
+        // Teachable Machine 影像模型網址：保留最後的斜線 /
         const URL = "https://teachablemachine.withgoogle.com/models/4Wj6Jfy4T/";
+
         let model, webcam, labelContainer, maxPredictions;
         let ocrWorker = null;
         let isSetup = false;
-        let isOcrProcessing = false; 
+        let isOcrProcessing = false;
+        let lastOcrTime = 0;
+
+        function showStatus(message, color = "#e53e3e") {
+            const loading = document.getElementById('loading-text');
+            loading.style.display = 'block';
+            loading.style.color = color;
+            loading.innerText = message;
+        }
+
+        function hideStatus() {
+            document.getElementById('loading-text').style.display = 'none';
+        }
 
         async function init() {
-            if (isSetup) return; 
-            
-            document.getElementById('start-btn').style.display = 'none';
-            document.getElementById('loading-text').style.display = 'block';
+            if (isSetup) return;
+
+            const startBtn = document.getElementById('start-btn');
+            startBtn.style.display = 'none';
+            showStatus('AI 影像模型載入中，請稍候...');
 
             const modelURL = URL + "model.json";
             const metadataURL = URL + "metadata.json";
 
             try {
-                // 1. 載入訓練好的 AI 影像分類模型
+                // 1. 先載入 Teachable Machine 影像模型。
                 model = await tmImage.load(modelURL, metadataURL);
                 maxPredictions = model.getTotalClasses();
+                initPredictionRows();
 
-                // 2. 初始化 OCR 引擎（優化：改為純英文 eng 提高加載成功率與運行速度）
-                ocrWorker = await Tesseract.createWorker('eng');
-
-                // 3. 設定相機解析度
-                const width = 400;
-                const height = 300;
-                const flip = false; 
-                
-                webcam = new tmImage.Webcam(width, height, flip);
-                
-                // 4. 智慧相機相容性調適機制
-                try {
-                    // 優先嘗試開啟手機後置鏡頭
-                    await webcam.setup({ facingMode: "environment" }); 
-                } catch (e) {
-                    console.log("無法調用後鏡頭，自動切換為預設/電腦視訊鏡頭");
-                    // 失敗時（如電腦瀏覽器備課測試），盲抓預設可用的視訊鏡頭
-                    await webcam.setup(); 
-                }
-                
-                // 5. 啟動鏡頭串流
-                await webcam.play();
-                document.getElementById('loading-text').style.display = 'none';
-                
-                const videoElement = webcam.canvas; 
-                videoElement.setAttribute("playsinline", true);
-                videoElement.setAttribute("muted", true);
-                
-                document.getElementById("webcam-container").appendChild(videoElement);
-
-                // 6. 初始化外觀分類顯示欄位
-                labelContainer = document.getElementById("label-container");
-                labelContainer.innerHTML = ""; 
-                for (let i = 0; i < maxPredictions; i++) {
-                    const row = document.createElement("div");
-                    row.className = "label-row";
-                    row.innerHTML = `
-                        <span class="class-name">--</span>
-                        <div class="bar-bg">
-                            <div class="bar-fill" id="bar-${i}"></div>
-                        </div>
-                        <span class="class-prob" id="prob-${i}">0%</span>
-                    `;
-                    labelContainer.appendChild(row);
-                }
+                // 2. 再開啟相機。若後鏡頭不可用，改用預設鏡頭。
+                showStatus('模型已載入，正在開啟相機...', '#2b6cb0');
+                await setupWebcam();
 
                 isSetup = true;
-                // 進入影像推論無限循環迴圈
+                hideStatus();
                 window.requestAnimationFrame(loop);
-                
+
+                // 3. OCR 改成背景初始化；OCR 失敗不會讓整個系統啟動失敗。
+                initOCRInBackground();
+
             } catch (error) {
-                alert("系統啟動失敗！\n\n排除步驟：\n1. 請確認 Teachable Machine 模型網址是否有效。\n2. 請確認已允許瀏覽器的相機存取權限。\n3. 若使用 iPhone，請務必複製網址並使用內建的 Safari 瀏覽器開啟！");
-                console.error(error);
-                document.getElementById('start-btn').style.display = 'block';
-                document.getElementById('loading-text').style.display = 'none';
+                console.error('系統啟動失敗：', error);
+                const detail = error && error.message ? error.message : String(error);
+                alert(
+                    '系統啟動失敗！\n\n' +
+                    '錯誤細節：' + detail + '\n\n' +
+                    '可能原因：\n' +
+                    '1. 這個 Teachable Machine 連結不是「影像模型」。\n' +
+                    '2. 模型網址、model.json 或 metadata.json 無法讀取。\n' +
+                    '3. 相機權限尚未允許，或瀏覽器不支援相機。'
+                );
+                showStatus('啟動失敗：' + detail, '#e53e3e');
+                startBtn.style.display = 'inline-block';
+            }
+        }
+
+        function initPredictionRows() {
+            labelContainer = document.getElementById("label-container");
+            labelContainer.innerHTML = "";
+
+            for (let i = 0; i < maxPredictions; i++) {
+                const row = document.createElement("div");
+                row.className = "label-row";
+                row.innerHTML = `
+                    <span class="class-name">--</span>
+                    <div class="bar-bg">
+                        <div class="bar-fill" id="bar-${i}"></div>
+                    </div>
+                    <span class="class-prob" id="prob-${i}">0%</span>
+                `;
+                labelContainer.appendChild(row);
+            }
+        }
+
+        async function setupWebcam() {
+            const width = 400;
+            const height = 300;
+            const flip = false;
+
+            webcam = new tmImage.Webcam(width, height, flip);
+
+            try {
+                await webcam.setup({ facingMode: "environment" });
+            } catch (e) {
+                console.log("後置鏡頭不可用，改用預設鏡頭：", e);
+                await webcam.setup();
+            }
+
+            await webcam.play();
+
+            const videoElement = webcam.canvas;
+            videoElement.setAttribute("playsinline", true);
+            videoElement.setAttribute("muted", true);
+
+            const webcamContainer = document.getElementById("webcam-container");
+            webcamContainer.innerHTML = "";
+            webcamContainer.appendChild(videoElement);
+        }
+
+        async function initOCRInBackground() {
+            const resultEl = document.getElementById('ocr-match-result');
+            try {
+                resultEl.innerText = "OCR 引擎背景載入中；影像分類已可使用。";
+                resultEl.style.color = "#718096";
+                ocrWorker = await Tesseract.createWorker('eng');
+                resultEl.innerText = "OCR 引擎已準備完成。";
+                resultEl.style.color = "#3182ce";
+            } catch (error) {
+                console.warn('OCR 初始化失敗，但影像分類仍可使用：', error);
+                ocrWorker = null;
+                resultEl.innerText = "⚠️ OCR 暫時無法載入，但影像分類功能可正常使用。";
+                resultEl.style.color = "#d97706";
             }
         }
 
         async function loop() {
             if (isSetup) {
-                webcam.update(); // 擷取當前最新影格
-                await predictImage(); // 執行影像特徵分類
-                
-                // OCR 運算量大，採非同步分流處理。若上一次辨識尚未結束則直接跳過，防止網頁凍結
-                if (!isOcrProcessing) {
-                    runOCR(); 
+                webcam.update();
+                await predictImage();
+
+                // OCR 每 1.5 秒執行一次，避免手機或平板卡頓。
+                const now = Date.now();
+                if (ocrWorker && !isOcrProcessing && now - lastOcrTime > 1500) {
+                    lastOcrTime = now;
+                    runOCR();
                 }
             }
             window.requestAnimationFrame(loop);
         }
 
-        // 核心一：影像外觀特徵分類辨識
         async function predictImage() {
             const prediction = await model.predict(webcam.canvas);
-            
+
             for (let i = 0; i < maxPredictions; i++) {
                 const className = prediction[i].className;
-                const probability = (prediction[i].probability * 100).toFixed(0);
-                
+                const probabilityNumber = prediction[i].probability * 100;
+                const probability = probabilityNumber.toFixed(0);
+
                 const row = labelContainer.childNodes[i];
                 if (row && row.querySelector) {
                     row.querySelector('.class-name').innerText = className;
                     row.querySelector('#prob-' + i).innerText = probability + "%";
                     row.querySelector('#bar-' + i).style.width = probability + "%";
-                    
-                    // 信心度大於 70% 顯示藍色能量條，否則顯示灰色
-                    if (probability > 70) {
-                        row.querySelector('#bar-' + i).style.backgroundColor = "#3182ce";
-                    } else {
-                        row.querySelector('#bar-' + i).style.backgroundColor = "#cbd5e0";
-                    }
+                    row.querySelector('#bar-' + i).style.backgroundColor = probabilityNumber > 70 ? "#3182ce" : "#cbd5e0";
                 }
             }
         }
 
-        // 核心二：OCR 文字辨識與字串邏輯特徵比對
         async function runOCR() {
             isOcrProcessing = true;
-            
+
             try {
-                // 將當前相機畫布影像丟給 Tesseract 進行文字辨識
                 const { data: { text } } = await ocrWorker.recognize(webcam.canvas);
-                
-                // 將文字清理（轉小寫、去除換行與空格）以便精準比對
                 const cleanText = text.toLowerCase().replace(/\s+/g, '');
-                
+
                 if (cleanText.trim() !== "") {
                     document.getElementById('ocr-text-box').innerText = text.trim();
-                    
-                    // 工業筆身常見印刷關鍵字匹配邏輯
-                    let isWhiteboard = cleanText.includes("white") || cleanText.includes("board");
-                    let isPermanent = cleanText.includes("mark") || cleanText.includes("perm") || cleanText.includes("pema");
-                    
+
+                    const isWhiteboard = cleanText.includes("white") || cleanText.includes("board");
+                    const isPermanent = cleanText.includes("mark") || cleanText.includes("perm") || cleanText.includes("pema");
                     const resultEl = document.getElementById('ocr-match-result');
-                    
+
                     if (isWhiteboard) {
                         resultEl.innerText = "📌 辨識出文字特徵！判定為：白板筆 (Whiteboard)";
                         resultEl.style.color = "#3182ce";
@@ -307,12 +347,9 @@
                 }
             } catch (err) {
                 console.error("OCR 運算錯誤:", err);
-            }
-            
-            // 每次 OCR 執行完畢後強制冷卻 600 毫秒，避免低階手機或網頁因高頻率計算而卡頓
-            setTimeout(() => {
+            } finally {
                 isOcrProcessing = false;
-            }, 600);
+            }
         }
     </script>
 </body>
